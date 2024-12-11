@@ -1,0 +1,192 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Upload</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:,">
+    <style>
+        * {
+            font-family: 'Poppins', sans-serif;
+        }
+        
+        .preview {
+            white-space: pre-wrap;
+            background-color: #f5f5f5;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 5px;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        
+        .loading {
+            display: none;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+            font-size: 15px;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid 4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .upload-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #selectButton {
+            background-color: #4CAF50;
+        }
+
+        #submitButton {
+            background-color: #cccccc;
+        }
+        
+        .upload-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .file-name {
+            margin-left: 10px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h2>Financial Document Tool</h2>
+    <p style="color: #666; margin-bottom: 20px; max-width: 600px; line-height: 1.6;">
+        Upload your financial document (PDF format) and our tool will automatically extract key financial information. Simply select your PDF file and click upload to begin the process.
+    </p>
+    <form id="uploadForm" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="file" name="pdf_file" id="pdfFile" accept="application/pdf" style="display: none;">
+        <div>
+        <button type="button" class="upload-btn" id="selectButton">Select PDF</button>
+            <span class="file-name" id="fileName"></span>
+        </div>
+        <div style="margin-top: 10px;">
+            <button type="submit" class="upload-btn" id="submitButton" disabled>Upload and Process</button>
+        </div>
+    </form>
+
+    <div class="loading" id="loadingIndicator">
+        <span id="loadingText">Processing PDF...</span>
+    </div>
+
+    {% if message %}
+        <h3>Extracted Content:</h3>
+        <div class="preview">{{ message }}</div>
+    {% endif %}
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('pdfFile');
+        const selectButton = document.getElementById('selectButton');
+        const submitButton = document.getElementById('submitButton');
+        const fileName = document.getElementById('fileName');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        
+        selectButton.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                fileName.textContent = file.name;
+                submitButton.disabled = false;
+            } else {
+                fileName.textContent = '';
+                submitButton.disabled = true;
+            }
+        });
+        
+        form.addEventListener('submit', (e) => {
+            submitButton.disabled = true;
+            selectButton.disabled = true;
+            loadingIndicator.style.display = 'block';
+            loadingText.textContent = `Uploading PDF and extracting data...`;
+            
+            // Clear the previous message if it exists
+            const previewDiv = document.querySelector('.preview');
+            if (previewDiv) {
+                previewDiv.remove();
+            }
+            const messageHeader = document.querySelector('h3');
+            if (messageHeader) {
+                messageHeader.remove();
+            }
+            
+            // Create a FormData object to track upload progress
+            const formData = new FormData(form);
+            const xhr = new XMLHttpRequest();
+            
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const percentComplete = ((event.loaded / event.total) * 100).toFixed(0);
+                    loadingText.textContent = `Uploading PDF and extracting data...`;
+                }
+            };
+            
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    // Parse the response and update the page
+                    const response = xhr.responseText;
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(response, 'text/html');
+                    
+                    // Find the message content
+                    const newMessage = doc.querySelector('.preview');
+                    const newHeader = doc.querySelector('h3');
+                    
+                    if (newMessage) {
+                        // Add the new content to the page
+                        if (newHeader) document.body.appendChild(newHeader.cloneNode(true));
+                        document.body.appendChild(newMessage.cloneNode(true));
+                    }
+                    
+                    // Reset the form state
+                    loadingIndicator.style.display = 'none';
+                    submitButton.disabled = false;
+                    selectButton.disabled = false;
+                    fileName.textContent = '';
+                    form.reset();
+                } else {
+                    loadingText.textContent = 'Error uploading file. Please try again.';
+                    submitButton.disabled = false;
+                    selectButton.disabled = false;
+                }
+            };
+            
+            xhr.onerror = function() {
+                loadingText.textContent = 'Error uploading file. Please try again.';
+                submitButton.disabled = false;
+                selectButton.disabled = false;
+            };
+            
+            e.preventDefault();
+            xhr.open('POST', form.action, true);
+            xhr.send(formData);
+        });
+    </script>
+</body>
+</html>
